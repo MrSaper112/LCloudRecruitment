@@ -1,0 +1,11 @@
+{
+  "type": "module",
+  "scripts": {
+    "build": "npx tsc | node dist/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/types": "^3.577.0",
+    "@types/node": "^20.14.2",
+    "aws-sdk": "^2.1637.0"
+  }
+}
