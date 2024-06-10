@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import * as fs from 'fs';
+import {ObjectIdentifier, ObjectKey} from "aws-sdk/clients/s3.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envPath = path.resolve(__dirname, '../env/bucketPass.env');
@@ -38,20 +39,94 @@ async function listObjects() {
 
 listObjects();
 
-const uploadFile = async (filePath: string, s3Key: string) => {
+async function uploadFile (filePath: string, s3Key: string)  {
     try {
         const fileContent = fs.readFileSync( filePath, 'utf8');
+        const ext = filePath.split(".")
         const params = {
             Bucket: Bucket,
-            Key: Prefix,
+            Key: Prefix + s3Key + `.${ext.pop()}`,
             Body: fileContent
         };
-        await s3.upload(params).promise();
+        await s3.upload(params).promise()
+            .then(res => {
+                console.log(res)
+        });
         console.log(`File uploaded successfully: ${s3Key}`);
     } catch (err) {
         console.error('Error uploading file:', err);
     }
 };
 
-uploadFile('./TestUpload.txt',"LoremIpsum")
-listObjects();
+async function listFilteredFiles( regex: string): Promise<ObjectIdentifier[]> {
+    console.log("Filtering item")
+    let files = []
+    try {
+        const params = {
+            Bucket: Bucket,
+            Prefix: Prefix
+        };
+        const data = await s3.listObjectsV2(params).promise();
+        const pattern = new RegExp(regex);
+        data.Contents?.forEach(file => {
+            if (pattern.test(file.Key)) {
+                files.push({Key: file.Key})
+            }
+        });
+        return files;
+    } catch (err) {
+        console.error('Error listing filtered files:', err);
+        return [];
+    }
+
+};
+
+// listFilteredFiles("Lore")
+//     .then((key: string[]) =>
+//     {
+//         console.log(key)
+//     })
+// listFilteredFiles(".txt")
+//     .then((key: string[]) =>
+//     {
+//         console.log(key)
+//     })
+
+const deleteFilteredFiles = async (regex: string) => {
+    try {
+        const params = {
+            Bucket: Bucket,
+        };
+        const filesToDelete: ObjectIdentifier[] = await listFilteredFiles(regex)
+        console.log("Files to delete" + filesToDelete)
+
+        if (filesToDelete.length === 0) {
+            console.log('No files matching the pattern.');
+            return;
+        }
+        const deleteParams = {
+            Bucket: Bucket,
+            Delete: { Objects: filesToDelete }
+        };
+
+        await s3.deleteObjects(deleteParams).promise();
+        console.log('Files deleted successfully.');
+    } catch (err) {
+        console.error('Error deleting files:', err);
+    }
+};
+uploadFile('./TestUpload.txt',"LoremIpsum2")
+    .then(()=>{
+        listFilteredFiles("Lore")
+            .then((key: ObjectIdentifier[]) =>
+            {
+                console.log(key)
+            })
+
+    })
+    .then(()=>
+    {
+        deleteFilteredFiles("Lore").then(()=>{
+            listObjects();
+        })
+    })
